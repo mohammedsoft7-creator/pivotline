@@ -18,10 +18,15 @@ import {
   RefreshCw,
   Radar,
   RotateCcw,
+  Send,
   SlidersHorizontal,
   Waypoints,
 } from 'lucide-react'
-import { ASSETS, chartIntervals, formatInterval } from '../services/marketData.js'
+import {
+  ASSETS,
+  chartIntervals,
+  formatInterval,
+} from '../services/marketData.js'
 import { schools } from '../engines/index.js'
 import { number } from '../engines/common.js'
 const icons = {
@@ -42,6 +47,9 @@ export function HeaderBar({
   activeCount,
   view,
   onView,
+  stream,
+  onTelegram,
+  telegramConnected,
 }) {
   return (
     <header className="topbar">
@@ -71,18 +79,38 @@ export function HeaderBar({
           <Radar size={15} /> قسم الصفقات{' '}
           <bdi aria-label={activeCount + ' إشارات مباشرة'}>{activeCount}</bdi>
         </button>
+        <button type="button" onClick={onTelegram}>
+          <Send size={15} /> ربط تلغرام{' '}
+          <i
+            className={'telegram-nav-dot' + (telegramConnected ? ' live' : '')}
+            aria-hidden="true"
+          />
+        </button>
       </nav>
       <div className="top-actions">
-        <span className={'feed ' + source}>
-          <i />
-          {
-            {
-              live: 'Live feed',
-              simulated: 'Simulated feed',
-              cached: 'Cached feed',
-              scanning: 'Signal scanner',
-            }[source]
+        <span
+          className={
+            'feed ws-' + stream.state + (stream.state === 'live' ? ' live' : '')
           }
+          title={
+            source === 'cached'
+              ? 'Historical candles'
+              : source === 'simulated'
+                ? 'Simulated candles'
+                : 'Binance WebSocket'
+          }
+        >
+          <i />
+          {stream.state === 'live'
+            ? 'Live WS · ' + stream.latency + 'ms'
+            : stream.state === 'reconnecting'
+              ? 'Reconnecting…'
+              : 'Connecting…'}
+          {source === 'simulated' || source === 'cached' ? (
+            <small className="feed-source">
+              {source === 'simulated' ? 'Simulated' : 'Historical'}
+            </small>
+          ) : null}
         </span>
         <button
           className="icon-btn"

@@ -215,21 +215,33 @@ export default function ChartWorkspace({
     }
   }, [])
   useLayoutEffect(() => {
-    const { bars, vol, line, main, sub } = chartRef.current
+    const { bars, vol, line, main, sub, previous } = chartRef.current
+    const histogram = (c) => ({
+      time: c.time,
+      value: c.volume,
+      color: c.close >= c.open ? '#23574f' : '#613744',
+    })
+    const rsiPoint = (c, i) =>
+      rsi[i] == null ? { time: c.time } : { time: c.time, value: rsi[i] }
+    chartRef.current.previous = candles
+    if (
+      previous &&
+      candles.length === previous.length &&
+      candles.at(-1).time === previous.at(-1).time &&
+      candles.every((c, i) => i === candles.length - 1 || c === previous[i])
+    ) {
+      const last = candles.at(-1)
+      if (last !== previous.at(-1)) {
+        bars.update(last)
+        vol.update(histogram(last))
+        line.update(rsiPoint(last, candles.length - 1))
+      }
+      return
+    }
     const range = main.timeScale().getVisibleLogicalRange()
     bars.setData(candles)
-    vol.setData(
-      candles.map((c) => ({
-        time: c.time,
-        value: c.volume,
-        color: c.close >= c.open ? '#23574f' : '#613744',
-      })),
-    )
-    line.setData(
-      candles.map((c, i) =>
-        rsi[i] == null ? { time: c.time } : { time: c.time, value: rsi[i] },
-      ),
-    )
+    vol.setData(candles.map(histogram))
+    line.setData(candles.map(rsiPoint))
     for (const c of [main, sub])
       c.timeScale().applyOptions({
         timeVisible: INTERVALS[interval] < 86400,

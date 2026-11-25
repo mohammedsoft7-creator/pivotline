@@ -22,6 +22,9 @@ const vote = (school, evidence, reason) => ({
 })
 
 export function closedCandles(data, interval) {
+  if (data.closedBars) return data.closedBars
+  if (data.closedThrough != null)
+    return data.candles.filter((bar) => bar.time <= data.closedThrough)
   const last = data.candles.at(-1)
   return last && (last.time + INTERVALS[interval]) * 1000 > data.updated
     ? data.candles.slice(0, -1)
@@ -351,7 +354,12 @@ export function assembleTrade({ votes, candles, pivots, gann, atr, interval }) {
   }
 }
 
-export function confluenceSignalEngine(symbol, interval, data) {
+export function confluenceSignalEngine(
+  symbol,
+  interval,
+  data,
+  { ignoreForming = false } = {},
+) {
   const candles = closedCandles(data, interval)
   const end = candles.length - 1
   const meta = {
@@ -399,7 +407,9 @@ export function confluenceSignalEngine(symbol, interval, data) {
     interval,
   })
   const forming =
-    data.candles.length > candles.length ? data.candles.at(-1) : null
+    !ignoreForming && data.candles.length > candles.length
+      ? data.candles.at(-1)
+      : null
   if (forming && evaluation.signal) {
     const { dir, stop, targets } = evaluation.signal
     const crossed =

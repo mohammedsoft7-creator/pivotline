@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "concurrently --kill-others-on-fail --names web,telegram npm:dev npm:telegram",
+    "telegram": "node --env-file-if-exists=.env server/telegramWorker.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -14,13 +16,18 @@
     "@fontsource-variable/cairo": "^5.3.0",
     "@fontsource-variable/inter": "^5.3.0",
     "autoprefixer": "^10.7.0",
+    "concurrently": "^10.0.7",
+    "express": "^5.3.0",
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^4.2.3",
     "lucide-react": "^1.79.0",
+    "node-cron": "^4.6.0",
+    "node-fetch": "^3.3.2",
     "postcss": "^8.5.33",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "tailwindcss": "^3.4.19"
+    "tailwindcss": "^3.4.19",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

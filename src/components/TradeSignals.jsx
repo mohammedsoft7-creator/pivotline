@@ -22,6 +22,14 @@ import { schools } from '../engines/index.js'
 import './TradeSignals.css'
 
 const sourceText = { live: 'مباشر', cached: 'محفوظ', simulated: 'محاكاة' }
+const trackingText = {
+  waiting: 'بانتظار الدخول',
+  entry: 'تم لمس الدخول',
+  TP1: 'تم لمس TP1',
+  TP2: 'تم لمس TP2',
+  TP3: 'تم لمس TP3',
+  SL: 'تم لمس وقف الخسارة',
+}
 const reasons = {
   alignment: 'أقل من 3 مدارس متوافقة',
   overlap: 'لا يوجد تقاطع سعري قريب بين مدرستين',
@@ -227,6 +235,14 @@ function SignalCard({ signal, onPlot }) {
           </bdi>
         </div>
       </div>
+      {signal.tracking && (
+        <div className="signal-pills">
+          <span>{trackingText[signal.tracking]}</span>
+          {(signal.hits ?? []).map((hit) => (
+            <span key={hit}>{trackingText[hit]}</span>
+          ))}
+        </div>
+      )}
       <div className="signal-pills">
         {signal.votes.map((v) => (
           <span key={v.school}>
@@ -388,7 +404,7 @@ export function TradeSignals({ scan, alerts, onPlot }) {
               <bdi className="signal-tf">{formatInterval(row.interval)}</bdi>
               <span className="scan-reason">
                 {shown.some((s) => s.key === row.key)
-                  ? 'توافق ' + row.signal.score + '%'
+                  ? 'توافق ' + shown.find((s) => s.key === row.key).score + '%'
                   : row.signal
                     ? 'النافذة مغلقة أو مستبعدة بالفلاتر'
                     : reasons[row.reason]}
@@ -415,6 +431,30 @@ export function TradeSignals({ scan, alerts, onPlot }) {
           </details>
         ))}
       </section>
+      {scan.events.length > 0 && (
+        <section
+          className="scan-status panel"
+          aria-label="تحديثات الصفقات المباشرة"
+        >
+          <h2>تحديثات الصفقات المباشرة</h2>
+          <ol className="trade-events">
+            {scan.events
+              .filter((e) => inMarket(e.signal))
+              .map((e) => (
+                <li key={e.signal.id + ':' + e.type + ':' + e.at}>
+                  <strong>{trackingText[e.type]}</strong>{' '}
+                  <bdi>
+                    {ASSETS[e.signal.symbol].pair} ·{' '}
+                    {formatInterval(e.signal.interval)} · {number(e.price)}
+                  </bdi>
+                  <time dir="ltr">
+                    {new Date(e.at).toISOString().slice(11, 19)} UTC
+                  </time>
+                </li>
+              ))}
+          </ol>
+        </section>
+      )}
     </main>
   )
 }
@@ -449,6 +489,7 @@ export function PositionStrip({ signal, onClear }) {
   return (
     <div className="position-strip" lang="ar" dir="rtl">
       <Direction signal={signal} />
+      {signal.tracking && <span>{trackingText[signal.tracking]}</span>}
       {signal.source !== 'live' && (
         <span className="signal-source">{sourceText[signal.source]}</span>
       )}

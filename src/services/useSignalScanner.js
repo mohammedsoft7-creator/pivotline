@@ -1,152 +1,173 @@
-import { useEffect, useMemo, useState } from 'react'
-import {
-  ASSETS,
-  INTERVALS,
-  fetchMarketData,
-  initialData,
-} from './marketData.js'
+import { useEffect, useRef, useState } from 'react'
+import { ASSETS, chartIntervals, initialData } from './marketData.js'
 import {
   signalIntervals,
-  marketKey,
   confluenceSignalEngine,
 } from '../engines/confluenceSignalEngine.js'
+import { startTrade, trackTrade } from '../engines/tradeTracker.js'
+import { createMarketStream, marketKey } from './realtimeStream.js'
 
-const markets = Object.keys(ASSETS).flatMap((symbol) =>
-  signalIntervals(symbol).map((interval) => ({
+const allMarkets = Object.keys(ASSETS).flatMap((symbol) =>
+  chartIntervals(symbol).map((interval) => ({
     symbol,
     interval,
     key: marketKey(symbol, interval),
   })),
 )
-const refreshDelay = (interval) => Math.min(60000, INTERVALS[interval] * 250)
-const pollGroups = new Map()
-for (const market of markets) {
-  const delay = refreshDelay(market.interval)
-  if (!pollGroups.has(delay)) pollGroups.set(delay, [])
-  pollGroups.get(delay).push(market)
+const scanMarkets = allMarkets.filter((m) =>
+  signalIntervals(m.symbol).includes(m.interval),
+)
+
+function candidates(book) {
+  return new Map(
+    scanMarkets.map((m) => [
+      m.key,
+      confluenceSignalEngine(m.symbol, m.interval, book[m.key], {
+        ignoreForming: true,
+      }),
+    ]),
+  )
 }
 
-async function readMarket(symbol, interval, signal) {
-  try {
-    return await fetchMarketData(symbol, interval, signal)
-  } catch {
-    return initialData(symbol, interval)
-  }
-}
-
-export function useSignalScanner(refresh) {
-  const [book, setBook] = useState(() =>
-    Object.fromEntries(
-      markets.map((m) => [m.key, initialData(m.symbol, m.interval)]),
-    ),
-  )
-  const [pending, setPending] = useState(
-    () => new Set(markets.map((m) => m.key)),
-  )
+export function useSignalScanner(refresh, symbol, interval) {
+  const [initial] = useState(() => {
+    const book = Object.fromEntries(
+      allMarkets.map((m) => [m.key, initialData(m.symbol, m.interval)]),
+    )
+    return {
+      book,
+      rows: [...candidates(book).values()],
+      pending: new Set(),
+      status: { state: 'connecting' },
+      trades: [],
+      events: [],
+    }
+  })
+  const [snapshot, setSnapshot] = useState(initial)
+  const stream = useRef(null),
+    requested = useRef({ symbol, interval })
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 10000)
+    requested.current = { symbol, interval }
+    stream.current?.watch(symbol, interval)
+  }, [symbol, interval])
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [])
   useEffect(() => {
-    const stops = Array.from(pollGroups, ([delay, group]) => {
-      let active = true,
-        timer,
-        controller
-      function markPending(busy) {
-        setPending((current) => {
-          const next = new Set(current)
-          for (const { key } of group) {
-            if (busy) next.add(key)
-            else next.delete(key)
-          }
-          return next
+    const book = { ...initial.book },
+      rows = candidates(book)
+    const pending = new Set(),
+      tracked = new Map(),
+      retired = new Set()
+    let status = { state: 'connecting' },
+      events = [],
+      frame = 0,
+      disposed = false
+    function flush() {
+      if (disposed || frame) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        setSnapshot({
+          book: { ...book },
+          rows: [...rows.values()],
+          pending: new Set(pending),
+          status,
+          trades: [...tracked.values()],
+          events,
         })
-      }
-      async function poll() {
-        controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 6500)
-        markPending(true)
-        try {
-          const rows = await Promise.all(
-            group.map(async (m) => [
-              m.key,
-              await readMarket(m.symbol, m.interval, controller.signal),
-            ]),
+      })
+    }
+    const connection = createMarketStream({
+      markets: allMarkets,
+      onStatus(value) {
+        if (value.loading) pending.add(value.loading)
+        else if (value.loaded) pending.delete(value.loaded)
+        else status = value
+        flush()
+      },
+      onMarket(key, data, closedChanged) {
+        const before = book[key]
+        book[key] = data
+        if (rows.has(key) && (closedChanged || before.source !== data.source)) {
+          const m = rows.get(key)
+          const row = confluenceSignalEngine(m.symbol, m.interval, data, {
+            ignoreForming: true,
+          })
+          rows.set(key, row)
+          const signal = row.signal
+          // A still-tracked entry can outlive its entry window as long as no exit traded.
+          for (const [id, trade] of tracked) {
+            if (trade.signal.key !== key || trade.enteredAt != null) continue
+            if (!signal || signal.id !== id) {
+              tracked.delete(id)
+              retired.delete(id)
+            }
+          }
+          if (!signal)
+            for (const id of retired)
+              if (id.startsWith(key + ':')) retired.delete(id)
+          if (
+            data.source === 'live' &&
+            signal &&
+            signal.expiresAt * 1000 > Date.now() &&
+            !tracked.has(signal.id) &&
+            !retired.has(signal.id)
           )
-          if (active) {
-            setBook((current) => ({ ...current, ...Object.fromEntries(rows) }))
-            setNow(Date.now())
-          }
-        } finally {
-          clearTimeout(timeout)
-          if (active) {
-            markPending(false)
-            timer = setTimeout(poll, delay)
-          }
+            tracked.set(signal.id, startTrade(signal))
         }
-      }
-      poll()
-      return () => {
-        active = false
-        clearTimeout(timer)
-        controller.abort()
-      }
+        flush()
+      },
+      onTrade(tick) {
+        for (const [id, trade] of tracked) {
+          if (
+            trade.enteredAt == null &&
+            book[trade.signal.key].source !== 'live'
+          )
+            continue
+          const result = trackTrade(trade, tick)
+          if (result.trade === trade) continue
+          if (result.trade.closed) {
+            tracked.delete(id)
+            retired.add(id)
+          } else tracked.set(id, result.trade)
+          if (result.events.length)
+            events = [...result.events.reverse(), ...events].slice(0, 20)
+        }
+        flush()
+      },
     })
-    return () => stops.forEach((stop) => stop())
-  }, [refresh])
-  const rows = useMemo(
-    () =>
-      markets.map((m) =>
-        confluenceSignalEngine(m.symbol, m.interval, book[m.key]),
-      ),
-    [book],
-  )
-  const active = [],
-    previews = []
-  for (const row of rows) {
-    if (!row.signal || row.signal.expiresAt * 1000 <= now) continue
-    if (
-      row.source === 'live' &&
-      now - row.updated < 2 * refreshDelay(row.interval) + 30000
-    )
-      active.push(row.signal)
-    else if (row.source !== 'live') previews.push(row.signal)
-  }
-  return { book, pending, busy: pending.size > 0, rows, active, previews }
-}
-
-export function useChartMarket(symbol, interval, shared, refresh) {
-  const [data, setData] = useState(
-    () => shared ?? initialData(symbol, interval),
-  )
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    if (shared) return
-    let active = true,
-      timer,
-      controller
-    async function poll() {
-      setBusy(true)
-      controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 6500)
-      try {
-        const next = await readMarket(symbol, interval, controller.signal)
-        if (active) setData(next)
-      } finally {
-        clearTimeout(timeout)
-        if (active) {
-          setBusy(false)
-          timer = setTimeout(poll, refreshDelay(interval))
-        }
-      }
-    }
-    poll()
+    stream.current = connection
+    for (const market of scanMarkets)
+      connection.watch(market.symbol, market.interval)
+    connection.watch(requested.current.symbol, requested.current.interval)
     return () => {
-      active = false
-      clearTimeout(timer)
-      controller.abort()
+      disposed = true
+      cancelAnimationFrame(frame)
+      connection.close()
+      stream.current = null
     }
-  }, [symbol, interval, shared, refresh])
-  return { data: shared ?? data, busy }
+    // The stream owns its book. Changes to the view do not reconnect the socket.
+  }, [initial])
+  useEffect(() => {
+    if (refresh) stream.current?.refresh()
+  }, [refresh])
+  const active =
+    snapshot.status.state === 'live'
+      ? snapshot.trades
+          .filter(
+            ({ signal, enteredAt }) =>
+              enteredAt != null || signal.expiresAt * 1000 > now,
+          )
+          .map((t) => ({
+            ...t.signal,
+            tracking: t.enteredAt != null ? 'entry' : 'waiting',
+            hits: t.hits,
+          }))
+      : []
+  const previews = snapshot.rows
+    .filter((r) => r.source !== 'live' && r.signal?.expiresAt * 1000 > now)
+    .map((r) => r.signal)
+  return { ...snapshot, active, previews, busy: snapshot.pending.size > 0 }
 }

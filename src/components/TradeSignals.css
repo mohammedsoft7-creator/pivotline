@@ -452,6 +452,19 @@
 .position-strip button {
   margin-inline-start: auto;
 }
+.trade-events li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-top: 1px solid #2b3445;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.trade-events time {
+  margin-inline-start: auto;
+  color: #9daac0;
+}
 @media (max-width: 1100px) {
   .topbar {
     flex-wrap: wrap;

@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, ChartCandlestick } from 'lucide-react'
 import { ASSETS, INTERVALS, chartIntervals } from './services/marketData.js'
 import { closedCandles, marketKey } from './engines/confluenceSignalEngine.js'
-import {
-  useChartMarket,
-  useSignalScanner,
-} from './services/useSignalScanner.js'
+import { useSignalScanner } from './services/useSignalScanner.js'
 import { useSignalAlerts } from './services/useSignalAlerts.js'
 import { calculateRSI } from './utils/indicators.js'
 import { schools } from './engines/index.js'
@@ -18,6 +15,8 @@ import {
 } from './components/HeaderBar.jsx'
 import ChartWorkspace from './components/ChartWorkspace.jsx'
 import ArabicCommentary from './components/ArabicCommentary.jsx'
+import { TelegramControl } from './components/TelegramControl.jsx'
+import { useTelegramControl } from './services/telegramControl.js'
 import {
   PositionStrip,
   QuickSignals,
@@ -36,17 +35,16 @@ function Terminal({
   mode,
   onMode,
   scan,
-  refresh,
   requestRefresh,
   alerts,
   onPlot,
   position,
   onClearPosition,
   plotRequest,
+  telegram,
 }) {
   const selectedMarket = marketKey(symbol, interval)
-  const shared = scan.book[selectedMarket]
-  const { data, busy } = useChartMarket(symbol, interval, shared, refresh)
+  const data = scan.book[selectedMarket]
   const [hover, setHover] = useState(null),
     [view, setView] = useState(0)
   const [expanded, setExpanded] = useState(false),
@@ -61,12 +59,14 @@ function Terminal({
     return () => window.removeEventListener('keydown', close)
   }, [])
   const rsi = useMemo(() => calculateRSI(data.candles), [data.candles])
+  const closed = data.closedBars ?? closedCandles(data, interval)
+  const chartEnd = data.candles.length - 1
   const analysis = useMemo(() => {
-    return schools[school].engine(closedCandles(data, interval), {
+    return schools[school].engine(closed, {
       intervalSeconds: INTERVALS[interval],
-      chartEnd: data.candles.length - 1,
+      chartEnd,
     })
-  }, [data, school, interval])
+  }, [closed, chartEnd, school, interval])
   const index = hover ?? data.candles.length - 1,
     candle = data.candles[index] ?? data.candles.at(-1)
   const save = async () => {
@@ -93,19 +93,19 @@ function Terminal({
         symbol={symbol}
         onSymbol={onSymbol}
         source={mode === 'chart' ? data.source : 'scanning'}
-        busy={
-          mode === 'signals'
-            ? scan.busy
-            : shared
-              ? scan.pending.has(selectedMarket)
-              : busy
-        }
+        busy={mode === 'signals' ? scan.busy : scan.pending.has(selectedMarket)}
         refresh={requestRefresh}
         exporting={exporting}
         save={save}
         activeCount={scan.active.length}
         view={mode}
         onView={onMode}
+        stream={scan.status}
+        onTelegram={() => telegram.setOpen(true)}
+        telegramConnected={
+          telegram.status?.configured &&
+          telegram.status?.stream.state === 'live'
+        }
       />
       {mode === 'signals' ? (
         <TradeSignals scan={scan} alerts={alerts} onPlot={onPlot} />
@@ -214,9 +214,14 @@ export default function App() {
   const [refresh, setRefresh] = useState(0)
   const [selected, setSelected] = useState(null)
   const [plotRequest, setPlotRequest] = useState(0)
-  const scan = useSignalScanner(refresh)
+  const scan = useSignalScanner(refresh, symbol, interval)
+  const telegram = useTelegramControl()
   const alerts = useSignalAlerts(scan.active)
-  const position = [...scan.active, ...scan.previews].find(
+  const position = [
+    ...scan.active,
+    ...scan.previews,
+    ...scan.events.map((e) => ({ ...e.signal, tracking: e.type })),
+  ].find(
     (s) => s.id === selected && s.symbol === symbol && s.interval === interval,
   )
   function changeSymbol(nextSymbol) {
@@ -235,26 +240,29 @@ export default function App() {
     [],
   )
   return (
-    <Terminal
-      key={symbol + interval}
-      symbol={symbol}
-      interval={interval}
-      onSymbol={changeSymbol}
-      onInterval={setIntervalValue}
-      school={school}
-      setSchool={setSchool}
-      settings={settings}
-      toggle={toggle}
-      mode={mode}
-      onMode={setMode}
-      scan={scan}
-      refresh={refresh}
-      requestRefresh={() => setRefresh((n) => n + 1)}
-      alerts={alerts}
-      onPlot={plot}
-      position={position}
-      plotRequest={plotRequest}
-      onClearPosition={() => setSelected(null)}
-    />
+    <>
+      <Terminal
+        key={symbol + interval}
+        symbol={symbol}
+        interval={interval}
+        onSymbol={changeSymbol}
+        onInterval={setIntervalValue}
+        school={school}
+        setSchool={setSchool}
+        settings={settings}
+        toggle={toggle}
+        mode={mode}
+        onMode={setMode}
+        scan={scan}
+        requestRefresh={() => setRefresh((n) => n + 1)}
+        alerts={alerts}
+        onPlot={plot}
+        position={position}
+        plotRequest={plotRequest}
+        onClearPosition={() => setSelected(null)}
+        telegram={telegram}
+      />
+      <TelegramControl control={telegram} />
+    </>
   )
 }

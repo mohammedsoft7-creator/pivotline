@@ -27,6 +27,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+        env:
+          VITE_TELEGRAM_API_URL: ${{ vars.TELEGRAM_API_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

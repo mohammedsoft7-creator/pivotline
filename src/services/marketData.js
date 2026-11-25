@@ -148,7 +148,12 @@ async function request(path, signal) {
   }
   return response.json()
 }
-export async function fetchMarketData(symbol, interval, signal) {
+export async function fetchMarketData(
+  symbol,
+  interval,
+  signal,
+  { historyOnly = false } = {},
+) {
   if (!chartIntervals(symbol).includes(interval))
     throw new Error('Unknown market')
   if (Date.now() < retryAfter) throw new Error('Rate limit cooldown')
@@ -157,7 +162,9 @@ export async function fetchMarketData(symbol, interval, signal) {
       'klines?symbol=' + symbol + '&interval=' + interval + '&limit=200',
       signal,
     ),
-    request('ticker/24hr?symbol=' + symbol, signal).catch(() => null),
+    historyOnly
+      ? null
+      : request('ticker/24hr?symbol=' + symbol, signal).catch(() => null),
   ])
   const candles = rows.map(([t, o, h, l, c, v]) => ({
     time: Number(t) / 1000,
