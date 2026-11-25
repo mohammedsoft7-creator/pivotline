@@ -2,7 +2,12 @@ import { schools } from './index.js'
 import { calculateRSI, zigzag } from '../utils/indicators.js'
 import { INTERVALS } from '../services/marketData.js'
 
-export const SIGNAL_INTERVALS = ['15m', '1h', '4h', '1d']
+const standardSignalIntervals = ['15m', '1h', '4h', '1d']
+const goldSignalIntervals = ['1m', '3m', ...standardSignalIntervals]
+export function signalIntervals(symbol = '') {
+  if (symbol === 'PAXGUSDT' || symbol === '') return goldSignalIntervals
+  return symbol === 'BTCUSDT' ? standardSignalIntervals : []
+}
 export const marketKey = (symbol, interval) => symbol + ':' + interval
 const extensions = [1.272, 1.618, 2.618]
 const tick = 0.01

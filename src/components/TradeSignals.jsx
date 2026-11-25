@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { ASSETS, formatInterval } from '../services/marketData.js'
 import {
-  SIGNAL_INTERVALS,
+  signalIntervals,
   calculatePosition,
 } from '../engines/confluenceSignalEngine.js'
 import { number } from '../engines/common.js'
@@ -280,6 +280,11 @@ export function TradeSignals({ scan, alerts, onPlot }) {
   const [symbol, setSymbol] = useState('')
   const [direction, setDirection] = useState('')
   const [interval, setInterval] = useState('')
+  function changeSymbol(nextSymbol) {
+    setSymbol(nextSymbol)
+    if (interval && !signalIntervals(nextSymbol).includes(interval))
+      setInterval('')
+  }
   const inMarket = (row) =>
     (!symbol || row.symbol === symbol) &&
     (!interval || row.interval === interval)
@@ -302,7 +307,10 @@ export function TradeSignals({ scan, alerts, onPlot }) {
           </div>
           <div>
             <h1>قسم الصفقات والتوصيات</h1>
-            <p>توافق المدارس الفنية عبر 8 أسواق وأطر زمنية</p>
+            <p>
+              توافق المدارس الفنية عبر {scan.rows.length} تركيبات للأصل والإطار
+              الزمني
+            </p>
           </div>
         </div>
         <button
@@ -321,7 +329,7 @@ export function TradeSignals({ scan, alerts, onPlot }) {
         <Filters
           label="الأصل"
           value={symbol}
-          onChange={setSymbol}
+          onChange={changeSymbol}
           options={[
             ['', 'الكل'],
             ...Object.entries(ASSETS).map(([id, a]) => [id, a.pair]),
@@ -343,14 +351,16 @@ export function TradeSignals({ scan, alerts, onPlot }) {
           onChange={setInterval}
           options={[
             ['', 'الكل'],
-            ...SIGNAL_INTERVALS.map((i) => [i, formatInterval(i)]),
+            ...signalIntervals(symbol).map((i) => [i, formatInterval(i)]),
           ]}
         />
       </div>
       <div className="scanner-result" aria-live="polite">
         <strong>{shown.length} نتيجة</strong>
         <span>
-          {scan.busy ? 'جارٍ تحديث البيانات…' : liveCount + ' من 8 مصادر مباشرة'}
+          {scan.busy
+            ? 'جارٍ تحديث البيانات…'
+            : liveCount + ' من ' + scan.rows.length + ' مصادر مباشرة'}
         </span>
       </div>
       {shown.length ? (

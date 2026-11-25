@@ -4,6 +4,7 @@ import {
   assembleTrade,
   calculatePosition,
   confluenceSignalEngine,
+  signalIntervals,
 } from '../src/engines/confluenceSignalEngine.js'
 import { INTERVALS, generateFallback } from '../src/services/marketData.js'
 
@@ -114,4 +115,35 @@ test('historical OHLC reaches real engine confluence, and a forming stop breach 
     candles: [...candles, forming],
   })
   assert.equal(breached.reason, 'crossed')
+})
+
+test('Gold-only scanner frames evaluate the same setup with frame-specific validity', () => {
+  const standard = ['15m', '1h', '4h', '1d']
+  assert.deepEqual(signalIntervals('BTCUSDT'), standard)
+  assert.deepEqual(signalIntervals('PAXGUSDT'), ['1m', '3m', ...standard])
+
+  const shape = generateFallback('BTCUSDT', '1m', 1700000000000).candles
+  const price = (value) => 3000 + (value - shape.at(-1).close) * 0.75
+  for (const interval of ['1m', '3m']) {
+    const step = INTERVALS[interval]
+    const candles = shape.slice(0, 156).map((c, i) => ({
+      time: candleTime + i * step,
+      open: price(c.open),
+      high: price(c.high),
+      low: price(c.low),
+      close: price(c.close),
+      volume: c.volume,
+    }))
+    const closedAt = candles.at(-1).time + step
+    const row = confluenceSignalEngine('PAXGUSDT', interval, {
+      candles,
+      source: 'live',
+      updated: closedAt * 1000,
+    })
+    assert.equal(row.signal.direction, 'SELL')
+    assert.equal(row.signal.symbol, 'PAXGUSDT')
+    assert.equal(row.signal.interval, interval)
+    assert.equal(row.signal.createdAt, closedAt)
+    assert.equal(row.signal.expiresAt, closedAt + step)
+  }
 })

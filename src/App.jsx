@@ -44,7 +44,8 @@ function Terminal({
   onClearPosition,
   plotRequest,
 }) {
-  const shared = scan.book[marketKey(symbol, interval)]
+  const selectedMarket = marketKey(symbol, interval)
+  const shared = scan.book[selectedMarket]
   const { data, busy } = useChartMarket(symbol, interval, shared, refresh)
   const [hover, setHover] = useState(null),
     [view, setView] = useState(0)
@@ -92,7 +93,13 @@ function Terminal({
         symbol={symbol}
         onSymbol={onSymbol}
         source={mode === 'chart' ? data.source : 'scanning'}
-        busy={mode !== 'chart' || shared ? scan.busy : busy}
+        busy={
+          mode === 'signals'
+            ? scan.busy
+            : shared
+              ? scan.pending.has(selectedMarket)
+              : busy
+        }
         refresh={requestRefresh}
         exporting={exporting}
         save={save}
