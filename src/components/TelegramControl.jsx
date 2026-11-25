@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Radio, Send, X } from 'lucide-react'
-import { api } from '../services/telegramControl.js'
+import { api, localTelegramSetupRequired } from '../services/telegramControl.js'
 import './TelegramControl.css'
 
 const activityNames = {
@@ -104,7 +104,15 @@ export function TelegramControl({ control }) {
         </button>
       </header>
       <div className="telegram-body">
-        {!key ? (
+        {localTelegramSetupRequired ? (
+          <div className="telegram-local">
+            <p>
+              تُدار إعدادات Telegram من لوحة Pivotline المحلية على الجهاز الذي
+              يشغّل العامل.
+            </p>
+            <a href="http://127.0.0.1:8787/">افتح لوحة Pivotline المحلية</a>
+          </div>
+        ) : !key ? (
           <form onSubmit={connect} className="telegram-form">
             <label>
               مفتاح إدارة الخادم

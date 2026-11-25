@@ -29,6 +29,18 @@
 .telegram-body {
   padding: 16px;
 }
+.telegram-local {
+  display: grid;
+  gap: 12px;
+}
+.telegram-local a {
+  justify-self: start;
+  background: #263a5b;
+  border: 1px solid #3a557c;
+  border-radius: 6px;
+  color: #d9e8ff;
+  padding: 6px 10px;
+}
 .telegram-form,
 .telegram-form label {
   display: grid;

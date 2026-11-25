@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 
-const endpoint =
-  (import.meta.env.VITE_TELEGRAM_API_URL || '').replace(/\/$/, '') +
-  '/api/telegram'
+const workerUrl = (import.meta.env.VITE_TELEGRAM_API_URL || '').trim()
+export const localTelegramSetupRequired =
+  !workerUrl && window.location.hostname.endsWith('.github.io')
+const endpoint = workerUrl.replace(/\/$/, '') + '/api/telegram'
+const workerUnavailable = 'خادم Telegram غير متاح على هذا العنوان.'
 
 export async function api(
   path,
@@ -10,20 +12,27 @@ export async function api(
   body,
   signal = AbortSignal.timeout(12000),
 ) {
-  const response = await fetch(endpoint + path, {
-    method: body === undefined ? 'GET' : 'POST',
-    signal,
-    cache: 'no-store',
-    headers: {
-      Authorization: 'Bearer ' + key,
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
+  if (localTelegramSetupRequired) throw new Error(workerUnavailable)
+  let response
+  try {
+    response = await fetch(endpoint + path, {
+      method: body === undefined ? 'GET' : 'POST',
+      signal,
+      cache: 'no-store',
+      headers: {
+        Authorization: 'Bearer ' + key,
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
+    throw new Error(workerUnavailable)
+  }
   if (
     !(response.headers.get('content-type') || '').includes('application/json')
   )
-    throw new Error('خادم Telegram غير متاح على هذا العنوان.')
+    throw new Error(workerUnavailable)
   const data = await response.json()
   if (!response.ok)
     throw new Error(data.error || 'تعذّر الاتصال بخادم Telegram.')
