@@ -3,6 +3,10 @@ import { formatInterval } from '../services/marketData.js'
 export async function exportSnapshot(element, symbol, interval, school) {
   const { default: html2canvas } = await import('html2canvas')
   await document.fonts.ready
+  // Let the chart's queued canvas paint finish before freezing the layer images.
+  await new Promise((resolve) =>
+    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+  )
   const stamp = new Date()
   const images = Array.from(element.querySelectorAll('canvas'), (c) =>
     c.toDataURL(),

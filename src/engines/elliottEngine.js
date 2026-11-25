@@ -283,7 +283,25 @@ function impulse(out, pts, candles) {
       ' من طول الأولى يعطي ' +
       number(target) +
       ' للخامسة.'
-    if (four) out.commentary.target = number(target)
+    if (four) {
+      out.commentary.target = number(target)
+      if (!reached && fitsZone) {
+        const wave2Bars = two.index - one.index
+        const wave4Bars = four.index - three.index
+        const timeRatio = wave4Bars / wave2Bars
+        out.tradeEvidence = {
+          dir,
+          trigger: four.price,
+          invalidation: four.price,
+          zone: {
+            low: Math.min(near, validFar),
+            high: Math.max(near, validFar),
+          },
+          from: four.index,
+          timeRatio,
+        }
+      }
+    }
     if (reached)
       scenario += ' بلغ السعر هذا المستوى، وننتظر تأكيد نهاية الخامسة.'
     else

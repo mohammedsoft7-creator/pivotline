@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
   RefreshCw,
+  Radar,
   RotateCcw,
   SlidersHorizontal,
   Waypoints,
@@ -38,6 +39,9 @@ export function HeaderBar({
   busy,
   exporting,
   save,
+  activeCount,
+  view,
+  onView,
 }) {
   return (
     <header className="topbar">
@@ -49,6 +53,25 @@ export function HeaderBar({
       </div>
       <span className="nav-divider" />
       <AssetSwitch symbol={symbol} onChange={onSymbol} />
+      <nav className="view-nav" lang="ar" aria-label="أقسام Pivotline">
+        <button
+          type="button"
+          aria-pressed={view === 'chart'}
+          onClick={() => onView('chart')}
+          title="Chart Workspace"
+        >
+          <CandlestickChart size={15} /> منصة التحليل
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === 'signals'}
+          onClick={() => onView('signals')}
+          title="Trade Signals"
+        >
+          <Radar size={15} /> قسم الصفقات{' '}
+          <bdi aria-label={activeCount + ' إشارات مباشرة'}>{activeCount}</bdi>
+        </button>
+      </nav>
       <div className="top-actions">
         <span className={'feed ' + source}>
           <i />
@@ -57,6 +80,7 @@ export function HeaderBar({
               live: 'Live feed',
               simulated: 'Simulated feed',
               cached: 'Cached feed',
+              scanning: 'Signal scanner',
             }[source]
           }
         </span>
@@ -69,16 +93,18 @@ export function HeaderBar({
         >
           <RefreshCw size={16} className={busy ? 'spin' : ''} />
         </button>
-        <button
-          className="export-btn"
-          onClick={save}
-          disabled={exporting}
-          title="تصدير صورة"
-        >
-          <Camera size={17} />
-          {exporting ? 'Exporting…' : 'Export PNG'}
-          <span lang="ar">تصدير صورة</span>
-        </button>
+        {view === 'chart' && (
+          <button
+            className="export-btn"
+            onClick={save}
+            disabled={exporting}
+            title="تصدير صورة"
+          >
+            <Camera size={17} />
+            {exporting ? 'Exporting…' : 'Export PNG'}
+            <span lang="ar">تصدير صورة</span>
+          </button>
+        )}
       </div>
     </header>
   )

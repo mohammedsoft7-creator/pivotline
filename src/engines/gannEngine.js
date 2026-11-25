@@ -134,6 +134,19 @@ export function gannEngine(candles, context = {}) {
       label: 'T+' + (i - chartEnd),
     })
   const nextTime = last.time + (first - end) * intervalSeconds
+  const squareStep = Math.floor(
+    dir * (Math.sqrt(last.close) - root) * 4 + 1e-10,
+  )
+  const squareRoot = root + (dir * squareStep) / 4
+  out.tradeEvidence = {
+    dir,
+    anchor: anchor.price,
+    fan: fanNow,
+    square: squareStep >= 0 && squareRoot > 0 ? squareRoot ** 2 : null,
+    cycleIndex: first,
+    cycleTime: nextTime,
+    targetLevels: targets.map((t) => t.price),
+  }
   out.commentary.scenario =
     'بتكرار مدة الضلع المرجعي، نافذة المراقبة التالية بعد ' +
     (first - chartEnd) +

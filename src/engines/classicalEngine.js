@@ -46,6 +46,7 @@ export function classicalEngine(candles) {
   }
   const [start, finish] = ps.slice(-2),
     up = finish.price > start.price
+  const trendlines = []
   for (const type of ['high', 'low']) {
     const pair = ps.filter((p) => p.type === type).slice(-2)
     if (pair.length < 2) continue
@@ -57,6 +58,8 @@ export function classicalEngine(candles) {
       (k, i) => i > b.index && side * (k.close - at(i)) < 0,
     )
     const stop = broken < 0 ? end : broken
+    if (broken < 0 && slope * side > 0)
+      trendlines.push({ dir: side, price: at(end), invalidation: b.price })
     out.overlays.push(
       path([a, b, point(stop, at(stop))], type === 'low' ? green : red),
     )
@@ -88,6 +91,24 @@ export function classicalEngine(candles) {
     (k, i) =>
       i > finish.index && (up ? k.close < start.price : k.close > start.price),
   )
+  out.tradeEvidence = {
+    levels: out.horizontalLines.map((l) => ({
+      dir: l.price < last ? 1 : -1,
+      price: l.price,
+      invalidation: l.price,
+    })),
+    trendlines,
+    retracement:
+      invalidated < 0
+        ? {
+            dir: up ? 1 : -1,
+            low: Math.min(fib(0.382), fib(0.618)),
+            high: Math.max(fib(0.382), fib(0.618)),
+            price: fib(0.5),
+            invalidation: start.price,
+          }
+        : null,
+  }
   for (const r of [0.382, 0.5, 0.618])
     out.horizontalLines.push(
       level(

@@ -135,6 +135,16 @@ export function harmonicEngine(candles) {
     )
     z.future = !d && touch < 0 && breach < 0
     out.zones.push(z)
+    if (breach < 0 && (d || touch >= 0)) {
+      out.tradeEvidence = {
+        dir: bull ? 1 : -1,
+        trigger: d?.price ?? (lo + hi) / 2,
+        invalidation: bull ? lo : hi,
+        zone: z,
+        from: d?.index ?? touch,
+        pattern: found.pattern.name,
+      }
+    }
     if (!d && touch < 0 && breach < 0)
       out.projections.push(
         path([c, point(end + 14, (lo + hi) / 2, 'D?')], violet),

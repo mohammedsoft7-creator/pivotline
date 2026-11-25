@@ -47,6 +47,7 @@ export function ictEngine(candles) {
           gapDir > 0 ? green : red,
         ),
       )
+      Object.assign(gaps.at(-1), { dir: gapDir, confirmedAt: i })
     }
     for (const type of ['high', 'low']) {
       const pivot = active[type],
@@ -82,6 +83,7 @@ export function ictEngine(candles) {
             ),
             dir,
             active: broken < 0,
+            confirmedAt: i,
           })
         }
         trend = dir
@@ -100,6 +102,14 @@ export function ictEngine(candles) {
   if (block && !shownBlocks.includes(block)) shownBlocks[0] = block
   out.zones = [...gaps.slice(-3), ...shownBlocks]
   if (last) {
+    out.tradeEvidence = {
+      dir: trend,
+      trigger: last.pivot.price,
+      zones: [
+        ...blocks.filter((b) => b.active && b.dir === trend),
+        ...gaps.filter((g) => g.dir === trend && g.to > end),
+      ],
+    }
     out.commentary.structure =
       'آخر كسر مؤكد بالإغلاق (' +
       last.line.label +

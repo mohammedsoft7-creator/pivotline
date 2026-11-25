@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, ChartCandlestick } from 'lucide-react'
+import { ASSETS, INTERVALS } from './services/marketData.js'
+import { closedCandles, marketKey } from './engines/confluenceSignalEngine.js'
 import {
-  ASSETS,
-  INTERVALS,
-  initialData,
-  fetchMarketData,
-} from './services/marketData.js'
+  useChartMarket,
+  useSignalScanner,
+} from './services/useSignalScanner.js'
+import { useSignalAlerts } from './services/useSignalAlerts.js'
 import { calculateRSI } from './utils/indicators.js'
 import { schools } from './engines/index.js'
 import { exportSnapshot } from './utils/exportSnapshot.js'
@@ -17,6 +18,11 @@ import {
 } from './components/HeaderBar.jsx'
 import ChartWorkspace from './components/ChartWorkspace.jsx'
 import ArabicCommentary from './components/ArabicCommentary.jsx'
+import {
+  PositionStrip,
+  QuickSignals,
+  TradeSignals,
+} from './components/TradeSignals.jsx'
 
 function Terminal({
   symbol,
@@ -27,44 +33,25 @@ function Terminal({
   setSchool,
   settings,
   toggle,
+  mode,
+  onMode,
+  scan,
+  refresh,
+  requestRefresh,
+  alerts,
+  onPlot,
+  position,
+  onClearPosition,
+  plotRequest,
 }) {
-  const [data, setData] = useState(() => initialData(symbol, interval)),
-    [busy, setBusy] = useState(false)
-  const [refresh, setRefresh] = useState(0),
-    [hover, setHover] = useState(null),
+  const shared = scan.book[marketKey(symbol, interval)]
+  const { data, busy } = useChartMarket(symbol, interval, shared, refresh)
+  const [hover, setHover] = useState(null),
     [view, setView] = useState(0)
   const [expanded, setExpanded] = useState(false),
     [exporting, setExporting] = useState(false),
     [message, setMessage] = useState('')
   const exportRef = useRef(null)
-  useEffect(() => {
-    let active = true,
-      timer,
-      controller
-    async function load() {
-      controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 6500)
-      setBusy(true)
-      try {
-        const next = await fetchMarketData(symbol, interval, controller.signal)
-        if (active) setData(next)
-      } catch {
-        if (active) setData(initialData(symbol, interval))
-      } finally {
-        clearTimeout(timeout)
-        if (active) {
-          setBusy(false)
-          timer = setTimeout(load, 60000)
-        }
-      }
-    }
-    load()
-    return () => {
-      active = false
-      clearTimeout(timer)
-      controller.abort()
-    }
-  }, [symbol, interval, refresh])
   useEffect(() => {
     const close = (e) => {
       if (e.key === 'Escape') setExpanded(false)
@@ -74,12 +61,7 @@ function Terminal({
   }, [])
   const rsi = useMemo(() => calculateRSI(data.candles), [data.candles])
   const analysis = useMemo(() => {
-    const last = data.candles.at(-1)
-    const closed =
-      (last.time + INTERVALS[interval]) * 1000 > data.updated
-        ? data.candles.slice(0, -1)
-        : data.candles
-    return schools[school].engine(closed, {
+    return schools[school].engine(closedCandles(data, interval), {
       intervalSeconds: INTERVALS[interval],
       chartEnd: data.candles.length - 1,
     })
@@ -109,78 +91,105 @@ function Terminal({
       <HeaderBar
         symbol={symbol}
         onSymbol={onSymbol}
-        source={data.source}
-        busy={busy}
-        refresh={() => setRefresh((n) => n + 1)}
+        source={mode === 'chart' ? data.source : 'scanning'}
+        busy={mode !== 'chart' || shared ? scan.busy : busy}
+        refresh={requestRefresh}
         exporting={exporting}
         save={save}
+        activeCount={scan.active.length}
+        view={mode}
+        onView={onMode}
       />
-      <main className="workspace">
-        <div className="work-heading">
-          <h1>Chart workspace</h1>
-          <div className="date">
-            <CalendarDays size={14} />
-            {new Date(data.updated).toLocaleDateString('en-GB', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })}
+      {mode === 'signals' ? (
+        <TradeSignals scan={scan} alerts={alerts} onPlot={onPlot} />
+      ) : (
+        <main className="workspace">
+          <div className="work-heading">
+            <h1>Chart workspace</h1>
+            <div className="date">
+              <CalendarDays size={14} />
+              {new Date(data.updated).toLocaleDateString('en-GB', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </div>
           </div>
-        </div>
-        <div className="workspace-grid">
-          <section
-            className={'chart-panel panel ' + (expanded ? 'expanded' : '')}
-            aria-label={ASSETS[symbol].pair + ' chart'}
-          >
-            <MarketHeader
-              symbol={symbol}
-              data={data}
-              interval={interval}
-              onInterval={onInterval}
-              reset={() => setView((n) => n + 1)}
-              expand={() => setExpanded((v) => !v)}
-              expanded={expanded}
-              candle={candle}
-              rsi={rsi[index]}
-            />
-            <ChartWorkspace
-              candles={data.candles}
-              interval={interval}
-              rsi={rsi}
-              analysis={analysis}
-              settings={settings}
-              onHover={setHover}
-              resetKey={view}
-              readout={rsi[index]}
-            />
-            <ChartFooter updated={data.updated} count={data.candles.length} />
-          </section>
-          <ModelPanel
-            school={school}
-            onSchool={setSchool}
-            settings={settings}
-            toggle={toggle}
+          <QuickSignals
+            active={scan.active}
+            onPlot={onPlot}
+            onOpen={() => onMode('signals')}
           />
+          <div className="workspace-grid">
+            <section
+              className={'chart-panel panel ' + (expanded ? 'expanded' : '')}
+              aria-label={ASSETS[symbol].pair + ' chart'}
+            >
+              <MarketHeader
+                symbol={symbol}
+                data={data}
+                interval={interval}
+                onInterval={onInterval}
+                reset={() => setView((n) => n + 1)}
+                expand={() => setExpanded((v) => !v)}
+                expanded={expanded}
+                candle={candle}
+                rsi={rsi[index]}
+              />
+              {position && (
+                <PositionStrip signal={position} onClear={onClearPosition} />
+              )}
+              <ChartWorkspace
+                candles={data.candles}
+                interval={interval}
+                rsi={rsi}
+                analysis={analysis}
+                settings={settings}
+                onHover={setHover}
+                resetKey={view + plotRequest}
+                readout={rsi[index]}
+                position={position}
+              />
+              <ChartFooter updated={data.updated} count={data.candles.length} />
+            </section>
+            <ModelPanel
+              school={school}
+              onSchool={setSchool}
+              settings={settings}
+              toggle={toggle}
+            />
+          </div>
+          <ArabicCommentary
+            commentary={analysis.commentary}
+            model={schools[school].name}
+          />
+          <footer className="page-footer">
+            <span>
+              <ChartCandlestick size={13} /> Pivotline terminal
+            </span>
+            <a
+              href="https://www.tradingview.com/"
+              title="TradingView Lightweight Charts™ · Copyright © 2024 TradingView, Inc."
+              target="_blank"
+              rel="noreferrer"
+            >
+              Charts by TradingView
+            </a>
+          </footer>
+        </main>
+      )}
+      {alerts.notice && (
+        <div
+          role="status"
+          className="toast signal-toast"
+          dir="rtl"
+          lang="ar"
+          data-html2canvas-ignore
+        >
+          {alerts.notice}
         </div>
-        <ArabicCommentary
-          commentary={analysis.commentary}
-          model={schools[school].name}
-        />
-        <footer className="page-footer">
-          <span>
-            <ChartCandlestick size={13} /> Pivotline terminal
-          </span>
-          <a
-            href="https://www.tradingview.com/"
-            title="TradingView Lightweight Charts™ · Copyright © 2024 TradingView, Inc."
-            target="_blank"
-            rel="noreferrer"
-          >
-            Charts by TradingView
-          </a>
-        </footer>
-      </main>
+      )}
       {message && (
         <div role="status" className="toast" data-html2canvas-ignore>
           {message}
@@ -194,6 +203,22 @@ export default function App() {
     [interval, setIntervalValue] = useState('1d'),
     [school, setSchool] = useState('ELLIOTT')
   const [settings, setSettings] = useState({ math: true, future: true })
+  const [mode, setMode] = useState('chart')
+  const [refresh, setRefresh] = useState(0)
+  const [selected, setSelected] = useState(null)
+  const [plotRequest, setPlotRequest] = useState(0)
+  const scan = useSignalScanner(refresh)
+  const alerts = useSignalAlerts(scan.active)
+  const position = [...scan.active, ...scan.previews].find(
+    (s) => s.id === selected && s.symbol === symbol && s.interval === interval,
+  )
+  function plot(signal) {
+    setSymbol(signal.symbol)
+    setIntervalValue(signal.interval)
+    setSelected(signal.id)
+    setPlotRequest((n) => n + 1)
+    setMode('chart')
+  }
   const toggle = useCallback(
     (k) => setSettings((s) => ({ ...s, [k]: !s[k] })),
     [],
@@ -209,6 +234,16 @@ export default function App() {
       setSchool={setSchool}
       settings={settings}
       toggle={toggle}
+      mode={mode}
+      onMode={setMode}
+      scan={scan}
+      refresh={refresh}
+      requestRefresh={() => setRefresh((n) => n + 1)}
+      alerts={alerts}
+      onPlot={plot}
+      position={position}
+      plotRequest={plotRequest}
+      onClearPosition={() => setSelected(null)}
     />
   )
 }

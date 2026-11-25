@@ -43,6 +43,7 @@ export default function ChartWorkspace({
   onHover,
   resetKey,
   readout,
+  position,
 }) {
   const mainRef = useRef(null),
     rsiRef = useRef(null),
@@ -50,7 +51,7 @@ export default function ChartWorkspace({
     chartRef = useRef(null),
     live = useRef(null)
   useLayoutEffect(() => {
-    live.current = { candles, rsi, analysis, settings, onHover }
+    live.current = { candles, rsi, analysis, settings, onHover, position }
   })
   useLayoutEffect(() => {
     const mainEl = mainRef.current,
@@ -83,6 +84,20 @@ export default function ChartWorkspace({
           data = live.current,
           range = main.timeScale().getVisibleLogicalRange()
         if (!info || !data || !range) return info
+        if (data.position && range.to >= data.candles.length - 5) {
+          const prices = [
+            data.position.stop,
+            ...data.position.targets.map((t) => t.price),
+          ]
+          info.priceRange.minValue = Math.min(
+            info.priceRange.minValue,
+            ...prices,
+          )
+          info.priceRange.maxValue = Math.max(
+            info.priceRange.maxValue,
+            ...prices,
+          )
+        }
         const paths = [
           ...data.analysis.overlays,
           ...(data.settings.future ? data.analysis.projections : []),
@@ -147,6 +162,7 @@ export default function ChartWorkspace({
           d.candles,
           d.analysis,
           d.settings,
+          d.position,
         )
       })
     }
@@ -232,9 +248,12 @@ export default function ChartWorkspace({
     sub.timeScale().setVisibleLogicalRange(range)
   }, [resetKey, interval])
   useLayoutEffect(() => {
-    chartRef.current.bars.applyOptions({})
-    chartRef.current.schedule()
-  }, [analysis, settings])
+    const { main, sub, bars, schedule } = chartRef.current
+    for (const c of [main, sub])
+      c.priceScale('right').applyOptions({ minimumWidth: position ? 124 : 84 })
+    bars.applyOptions({})
+    schedule()
+  }, [analysis, settings, position])
   return (
     <>
       <div className="main-pane">
