@@ -5,6 +5,7 @@ import {
   generateFallback,
   INTERVALS,
   ASSETS,
+  chartIntervals,
   fetchMarketData,
   initialData,
 } from '../src/services/marketData.js'
@@ -141,7 +142,8 @@ test('ICT confirms breaks on close and records a wick-only sweep independently',
 })
 test('all markets generate 200 valid, evenly spaced candles and finite chart geometry', () => {
   for (const symbol of Object.keys(ASSETS))
-    for (const [interval, step] of Object.entries(INTERVALS)) {
+    for (const interval of chartIntervals(symbol)) {
+      const step = INTERVALS[interval]
       const data = generateFallback(symbol, interval, 1700000000000)
       assert.equal(data.candles.length, 200)
       assert.ok(Number.isFinite(data.change))
@@ -228,6 +230,56 @@ test('5m uses 300-second boundaries and requests 200 Binance candles for each ma
     assert.equal(initialData(symbol, '5m').source, 'cached')
     fetch.mock.restore()
   }
+})
+test('1m and 3m are supported Gold-only and use the native candle intervals', async (t) => {
+  assert.deepEqual(chartIntervals('BTCUSDT'), [
+    '5m',
+    '15m',
+    '1h',
+    '4h',
+    '1d',
+    '1w',
+  ])
+  assert.deepEqual(chartIntervals('PAXGUSDT'), [
+    '1m',
+    '3m',
+    ...chartIntervals('BTCUSDT'),
+  ])
+  const signal = new AbortController().signal
+  const fetch = t.mock.method(globalThis, 'fetch', async (input) => {
+    const url = new URL(input)
+    assert.equal(url.searchParams.get('symbol'), 'PAXGUSDT')
+    if (url.pathname.endsWith('/ticker/24hr')) {
+      return Response.json({ priceChangePercent: '0.75' })
+    }
+    const interval = url.searchParams.get('interval')
+    assert.ok(interval === '1m' || interval === '3m')
+    assert.equal(url.searchParams.get('limit'), '200')
+    return Response.json(
+      generateFallback('PAXGUSDT', interval).candles.map((c) => [
+        c.time * 1000,
+        c.open,
+        c.high,
+        c.low,
+        c.close,
+        c.volume,
+      ]),
+    )
+  })
+  for (const [interval, step] of [
+    ['1m', 60],
+    ['3m', 180],
+  ]) {
+    await assert.rejects(
+      fetchMarketData('BTCUSDT', interval, signal),
+      /Unknown market/,
+    )
+    const market = await fetchMarketData('PAXGUSDT', interval, signal)
+    assert.equal(market.source, 'live')
+    assert.equal(market.candles.length, 200)
+    assert.ok(market.candles.every((c) => c.time % step === 0))
+  }
+  assert.equal(fetch.mock.callCount(), 4)
 })
 test('zigzag omits a double pivot whose intrabar sequence is ambiguous', () => {
   const bars = [

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ASSETS, fetchMarketData, initialData } from './marketData.js'
+import {
+  ASSETS,
+  INTERVALS,
+  fetchMarketData,
+  initialData,
+} from './marketData.js'
 import {
   SIGNAL_INTERVALS,
   marketKey,
@@ -93,6 +98,7 @@ export function useChartMarket(symbol, interval, shared, refresh) {
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     if (shared) return
+    const refreshDelay = Math.min(60000, INTERVALS[interval] * 250)
     let active = true,
       timer,
       controller
@@ -107,7 +113,7 @@ export function useChartMarket(symbol, interval, shared, refresh) {
         clearTimeout(timeout)
         if (active) {
           setBusy(false)
-          timer = setTimeout(poll, 60000)
+          timer = setTimeout(poll, refreshDelay)
         }
       }
     }

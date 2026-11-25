@@ -851,9 +851,6 @@ button {
   }
 }
 @media (max-width: 470px) {
-  .chart-type span {
-    display: none;
-  }
   .topbar,
   .workspace {
     padding-left: 10px;
@@ -898,11 +895,22 @@ button {
     font-size: 20px;
   }
   .chart-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 41px;
+    height: auto;
     padding: 0 6px;
     gap: 4px;
   }
+  .chart-type {
+    display: none;
+  }
+  .timeframes {
+    flex-wrap: wrap;
+    gap: 1px;
+    padding-block: 4px;
+  }
   .timeframes button {
-    padding: 4px 5px;
+    padding: 4px;
   }
   .main-pane {
     min-height: 235px;

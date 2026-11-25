@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, ChartCandlestick } from 'lucide-react'
-import { ASSETS, INTERVALS } from './services/marketData.js'
+import { ASSETS, INTERVALS, chartIntervals } from './services/marketData.js'
 import { closedCandles, marketKey } from './engines/confluenceSignalEngine.js'
 import {
   useChartMarket,
@@ -212,6 +212,10 @@ export default function App() {
   const position = [...scan.active, ...scan.previews].find(
     (s) => s.id === selected && s.symbol === symbol && s.interval === interval,
   )
+  function changeSymbol(nextSymbol) {
+    setSymbol(nextSymbol)
+    if (!chartIntervals(nextSymbol).includes(interval)) setIntervalValue('5m')
+  }
   function plot(signal) {
     setSymbol(signal.symbol)
     setIntervalValue(signal.interval)
@@ -228,7 +232,7 @@ export default function App() {
       key={symbol + interval}
       symbol={symbol}
       interval={interval}
-      onSymbol={setSymbol}
+      onSymbol={changeSymbol}
       onInterval={setIntervalValue}
       school={school}
       setSchool={setSchool}

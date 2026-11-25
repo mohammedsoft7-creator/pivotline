@@ -21,7 +21,7 @@ import {
   SlidersHorizontal,
   Waypoints,
 } from 'lucide-react'
-import { ASSETS, INTERVALS, formatInterval } from '../services/marketData.js'
+import { ASSETS, chartIntervals, formatInterval } from '../services/marketData.js'
 import { schools } from '../engines/index.js'
 import { number } from '../engines/common.js'
 const icons = {
@@ -184,7 +184,7 @@ export function MarketHeader({
           <span>Candles</span>
         </div>
         <div className="timeframes">
-          {Object.keys(INTERVALS).map((v) => (
+          {chartIntervals(symbol).map((v) => (
             <button
               key={v}
               aria-pressed={interval === v}

@@ -18,7 +18,7 @@ School engines use closed candles and bilateral confirmed swing points. RSI and 
 
 Drag or zoom either chart to explore history. The reset control restores the initial range. The camera exports the entire dashboard with its current analysis, visibility settings and data source.
 
-Both markets support 5m, 15m, 1h, 4h, 1d and 1w. The simulated 5m feed models an additional price reference 24 hours before the latest close, outside the 200 displayed bars.
+Both markets support 5m, 15m, 1h, 4h, 1d and 1w. The Gold chart also supports 1m and 3m, refreshed every 15 and 45 seconds respectively. The simulated intraday feed includes a 24-hour price reference even when the 200 displayed bars cover a shorter period.
 
 The Elliott engine tests standard, non-truncated impulse candidates and following zigzag corrections at one confirmed pivot degree. Targets use measured leg lengths. The fifth-wave projection must clear wave three while respecting its relative length. Diagonals and complex corrections are outside this count. See [Elliott Wave International’s impulse rules](https://www.elliottwave.com/waveopedia/impulse/) and [wave-length guidelines](https://www.elliottwave.com/waveopedia/equality/).
 

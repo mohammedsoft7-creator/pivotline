@@ -8,12 +8,22 @@ export const ASSETS = {
   PAXGUSDT: { pair: 'XAU/USD', name: 'Gold', quote: 'US Dollar', unit: 'PAXG' },
 }
 export const INTERVALS = {
+  '1m': 60,
+  '3m': 180,
   '5m': 300,
   '15m': 900,
   '1h': 3600,
   '4h': 14400,
   '1d': 86400,
   '1w': 604800,
+}
+const goldIntervals = Object.keys(INTERVALS)
+const bitcoinIntervals = goldIntervals.filter(
+  (interval) => INTERVALS[interval] >= 300,
+)
+export function chartIntervals(symbol) {
+  if (symbol === 'PAXGUSDT') return goldIntervals
+  return symbol === 'BTCUSDT' ? bitcoinIntervals : []
 }
 const endpoint = 'https://api.binance.com/api/v3/'
 export const formatInterval = (interval) =>
@@ -31,7 +41,10 @@ export function generateFallback(symbol, interval, now = Date.now()) {
   const amplitude =
     base * (gold ? 0.037 : 0.075) * Math.pow(seconds / 86400, 0.3)
   const anchors = [
-    [-90, -0.38], // Includes the simulated 24h reference before the 200 visible 5m bars.
+    // Include the 24-hour reference for chart intervals with fewer than 24 hours visible.
+    [-1241, -0.52],
+    [-281, -0.2],
+    [-90, -0.38],
     [0, -0.7],
     [14, -0.1],
     [27, -0.64],
@@ -136,7 +149,8 @@ async function request(path, signal) {
   return response.json()
 }
 export async function fetchMarketData(symbol, interval, signal) {
-  if (!ASSETS[symbol] || !INTERVALS[interval]) throw new Error('Unknown market')
+  if (!chartIntervals(symbol).includes(interval))
+    throw new Error('Unknown market')
   if (Date.now() < retryAfter) throw new Error('Rate limit cooldown')
   const [rows, ticker] = await Promise.all([
     request(
